@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,9 +49,15 @@ func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar) *EndpointC
 }
 
 func (ec *EndpointCapture) StartCapture(verbose bool) error {
-	handle, err := pcap.OpenLive("lo0", 65536, true, pcap.BlockForever)
+
+	iface, err := getLoopbackInterface()
 	if err != nil {
-		return fmt.Errorf("failed to open interface %s: %w", "lo0", err)
+		return err
+	}
+
+	handle, err := pcap.OpenLive(iface, 65536, true, pcap.BlockForever)
+	if err != nil {
+		return fmt.Errorf("failed to open interface %s: %w", iface, err)
 	}
 	defer handle.Close()
 
@@ -74,6 +81,19 @@ func (ec *EndpointCapture) StartCapture(verbose bool) error {
 	}
 
 	return nil
+}
+
+func getLoopbackInterface() (string, error) {
+	switch runtime.GOOS {
+	case "linux":
+		return "lo", nil
+	case "darwin", "freebsd", "openbsd":
+		return "lo0", nil
+	case "windows":
+		return "", fmt.Errorf("Windows is not supported at the moment")
+	default:
+		return "lo0", nil
+	}
 }
 
 func (ec *EndpointCapture) processPacket(packet gopacket.Packet, verbose bool) {

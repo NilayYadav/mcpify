@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/NilayYadav/mcpify/internal/capture"
 	"github.com/NilayYadav/mcpify/internal/server"
@@ -30,6 +32,11 @@ func main() {
 	targetURL, err := url.Parse(*target)
 	if err != nil {
 		log.Fatalf("Invalid target URL: %v", err)
+	}
+
+	if err := checkTargetServer(*target); err != nil {
+		log.Fatalf("Target server check failed: %v", err)
+		log.Printf("Make sure your server is running at %s", *target)
 	}
 
 	mcpServer := server.NewMCPServer("mcpify", "1.0.0", *maxTools)
@@ -62,4 +69,23 @@ func main() {
 	if err := endpointCapture.StartCapture(*verbose); err != nil {
 		log.Fatalf("Failed to start capture: %v", err)
 	}
+}
+
+func checkTargetServer(target string) error {
+	log.Printf("Checking target server at %s", target)
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Head(target)
+
+	if err != nil {
+		return fmt.Errorf("server not reachable: %v", err)
+
+	}
+	defer resp.Body.Close()
+
+	log.Printf("Target server response: %s", resp.Status)
+	return nil
 }
