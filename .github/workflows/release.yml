@@ -27,9 +27,6 @@ jobs:
         - os: linux
           arch: amd64
           runner: ubuntu-latest
-        - os: linux
-          arch: arm64
-          runner: ubuntu-latest
 
     steps:
     - name: Checkout code
@@ -45,9 +42,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libpcap-dev
-        if [ "${{ matrix.platform.arch }}" = "arm64" ]; then
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-        fi
 
     - name: Install dependencies (macOS)
       if: matrix.platform.os == 'darwin'
@@ -64,9 +58,6 @@ jobs:
         GOARCH: ${{ matrix.platform.arch }}
         CGO_ENABLED: 1
       run: |
-        if [ "${{ matrix.platform.os }}" = "linux" ] && [ "${{ matrix.platform.arch }}" = "arm64" ]; then
-          export CC=aarch64-linux-gnu-gcc
-        fi
         go build -ldflags="-s -w" -o mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }} ./cmd/mcpify
 
     - name: Make binary executable
