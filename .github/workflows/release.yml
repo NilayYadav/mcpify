@@ -20,10 +20,10 @@ jobs:
         platform:
         - os: darwin
           arch: amd64
-          runner: macos-13 # Intel runner
+          runner: macos-latest
         - os: darwin
           arch: arm64
-          runner: macos-latest # ARM runner
+          runner: macos-latest
         - os: linux
           arch: amd64
           runner: ubuntu-latest
@@ -44,24 +44,13 @@ jobs:
       id: version
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-    - name: Install dependencies
-      if: matrix.platform.os == 'linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libpcap-dev
-
-    - name: Set up cross-compilation for Linux ARM64
-      if: matrix.platform.os == 'linux' && matrix.platform.arch == 'arm64'
-      run: |
-        sudo apt-get install -y gcc-aarch64-linux-gnu
-        echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-
     - name: Build binary
       env:
         GOOS: ${{ matrix.platform.os }}
         GOARCH: ${{ matrix.platform.arch }}
+        CGO_ENABLED: 0
       run: |
-        go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }} ./cmd/mcpify
+        go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }} .
 
     - name: Make binary executable
       run: chmod +x mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
