@@ -1,0 +1,64 @@
+name: Build and Release mcpify
+
+on:
+  release:
+    types: [ created ]
+  push:
+    tags:
+    - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform.os }}-${{ matrix.platform.arch }})
+    runs-on: ${{ matrix.platform.runner }}
+
+    strategy:
+      matrix:
+        platform:
+        - os: darwin
+          arch: amd64
+          runner: macos-latest
+        - os: darwin
+          arch: arm64
+          runner: macos-latest
+        - os: linux
+          arch: amd64
+          runner: ubuntu-latest
+        - os: linux
+          arch: arm64
+          runner: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Get version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.platform.os }}
+        GOARCH: ${{ matrix.platform.arch }}
+        CGO_ENABLED: 0
+      run: |
+        go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+
+    - name: Make binary executable
+      run: chmod +x mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+
+    - name: Upload to release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
