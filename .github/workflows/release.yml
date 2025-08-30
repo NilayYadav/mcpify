@@ -38,7 +38,21 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21'
+        go-version: '1.24.2'
+
+    - name: Install dependencies (Linux)
+      if: matrix.platform.os == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libpcap-dev
+        if [ "${{ matrix.platform.arch }}" = "arm64" ]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+        fi
+
+    - name: Install dependencies (macOS)
+      if: matrix.platform.os == 'darwin'
+      run: |
+        brew install libpcap
 
     - name: Get version
       id: version
@@ -48,17 +62,22 @@ jobs:
       env:
         GOOS: ${{ matrix.platform.os }}
         GOARCH: ${{ matrix.platform.arch }}
-        CGO_ENABLED: 0
+        CGO_ENABLED: 1
       run: |
-        go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" -o mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }} .
+        if [ "${{ matrix.platform.os }}" = "linux" ] && [ "${{ matrix.platform.arch }}" = "arm64" ]; then
+          export CC=aarch64-linux-gnu-gcc
+        fi
+        go build -ldflags="-s -w" -o mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }} ./cmd/mcpify
 
     - name: Make binary executable
-      run: chmod +x mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+      run: |
+        chmod +x mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
 
     - name: Upload to release
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
+        files: |
+          mcpify-${{ matrix.platform.os }}-${{ matrix.platform.arch }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
