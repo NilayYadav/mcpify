@@ -3,6 +3,7 @@ package capture
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/pcap"
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 )
 
 type ToolRegistrar interface {
@@ -27,6 +30,7 @@ type EndpointCapture struct {
 	toolRegistrar ToolRegistrar
 	seenAPIs      map[string]*APICall
 	mu            sync.RWMutex
+	useLLM        bool
 }
 
 type APICall struct {
@@ -40,11 +44,12 @@ type APICall struct {
 	StatusCodes []int             `json:"status_codes,omitempty"`
 }
 
-func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar) *EndpointCapture {
+func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar, useLLM bool) *EndpointCapture {
 	return &EndpointCapture{
 		target:        target,
 		toolRegistrar: toolRegistrar,
 		seenAPIs:      make(map[string]*APICall),
+		useLLM:        useLLM,
 	}
 }
 
@@ -134,18 +139,6 @@ func (ec *EndpointCapture) parseHTTPRequest(payload []byte, verbose bool) {
 		return
 	}
 	defer req.Body.Close()
-	println(req.Host)
-	println(req.Method)
-	println(req.URL.Path)
-	println(req.Proto)
-
-	for key, values := range req.Header {
-		println(key, values[0])
-	}
-
-	bodybt, _ := io.ReadAll(req.Body)
-
-	println(string(bodybt))
 
 	// Check if this request is for our target host
 	if !ec.isTargetRequest(req) {
@@ -225,7 +218,16 @@ func (ec *EndpointCapture) recordAPICall(method, path string, headers map[string
 }
 
 func (ec *EndpointCapture) registerMCPTool(apiCall *APICall) {
-	toolName := ec.generateToolName(apiCall.Method, apiCall.Path)
+	// toolName := ec.generateToolName(apiCall.Method, apiCall.Path)
+	// toolNameLLM := ec.GenerateToolNameWithLLM(apiCall.Method, apiCall.Path, []byte(apiCall.Body), apiCall.Headers)
+	var toolName string
+
+	if !ec.useLLM {
+		toolName = ec.generateToolName(apiCall.Method, apiCall.Path)
+	} else {
+		toolName = ec.GenerateToolNameWithLLM(apiCall.Method, apiCall.Path, []byte(apiCall.Body), apiCall.Headers)
+	}
+
 	url := ec.target.String() + apiCall.Path
 	description := fmt.Sprintf("Auto-discovered: %s %s", apiCall.Method, apiCall.Path)
 
@@ -256,6 +258,111 @@ func (ec *EndpointCapture) generateToolName(method, path string) string {
 	}
 
 	return fmt.Sprintf("%s_%s", strings.ToLower(method), safePath)
+}
+
+func (ec *EndpointCapture) GenerateToolNameWithLLM(method, path string, requestBody []byte, headers map[string]string) string {
+	println("Generating tool name with LLM for:", method, path)
+
+	body := string(requestBody)
+	if len(body) > 500 {
+		body = body[:500] + "..."
+	}
+
+	var headerParts []string
+	for k, v := range headers {
+		headerParts = append(headerParts, fmt.Sprintf("%s: %s", k, v))
+	}
+	headersStr := strings.Join(headerParts, "\n")
+
+	systemPrompt := `Role:
+	You analyze HTTP API requests and output a single, concise snake_case tool name describing the endpoints primary action.
+
+	Output:
+	- Return ONLY the tool name. No quotes, no punctuation, no explanations.
+
+	Naming rules (strict):
+	- 2-4 words in snake_case, lowercase.
+	- Prefer resource names from the PATH. Ignore headers. Ignore the request body for GET and DELETE.
+	- Use CRUD verbs unless the path indicates a domain action.
+
+	Method → verb mapping:
+	- GET /collection           → list_<plural_resource>
+	- GET /collection/{id}      → get_<singular_resource>
+	- POST /collection          → create_<singular_resource>
+	- PUT/PATCH /collection/{id}→ update_<singular_resource>
+	- DELETE /collection/{id}   → delete_<singular_resource>
+
+	Refinements:
+	- Queries: if path includes /search OR query has q/query/search/keyword → search_<plural_resource>; otherwise use list_<plural_resource>.
+	- Sub-resources: /users/{id}/orders
+	- GET collection           → list_user_orders
+	- GET item                 → get_user_order
+	- POST collection          → create_user_order
+	- PUT/PATCH/DELETE item    → update/delete_user_order
+	- Action endpoints (last segment is a verb): e.g., /orders/{id}/cancel → cancel_order; /users/{id}/reset-password → reset_user_password.
+	- Auth/health/webhooks:
+	- /login → login
+	- /logout → logout
+	- /refresh or /token/refresh → refresh_token
+	- /health or /status → health_check
+	- /{provider}/webhook (POST) → receive_{provider}_webhook
+	- Reports/analytics nouns:
+	- GET /reports/sales → get_sales_report
+	- POST /reports/sales → generate_sales_report
+	- Bulk ops: paths with /bulk or /batch → prefix with bulk_, e.g., bulk_create_orders.
+	- Versioning and extensions: drop /v1, /v2, and extensions like .json from names.
+	- IDs: treat {id}, :id, numeric IDs, or UUIDs as identifiers → use singular for that segment.
+	- Singular/plural: collection segments are plural (users), item segments are singular (user). If unsure, keep the path noun as-is (but lowercase).
+
+	Validation guardrails:
+	- Do not infer business domains from headers or body if the path already defines the resource.
+	- Do not use generic names like api_call, http_request, or endpoint.
+	- When method and body conflict (e.g., GET with a JSON body), the METHOD and PATH win.
+
+	Return ONLY the tool name, nothing else.
+`
+
+	prompt := fmt.Sprintf(`HTTP Method: %s
+			Path: %s
+			Request Body: %s
+			Headers: %s
+			Generate a descriptive tool name for this API endpoint.`, method, path, body, headersStr,
+	)
+
+	client := openai.NewClient(
+		option.WithBaseURL("https://api.fireworks.ai/inference/v1"),
+		option.WithAPIKey("ie8J0Y4auCwWjZxx4p5XvQYwH24pHjrLKMZv7RpcGFpAQ2P2"),
+	)
+
+	chatCompletion, err := client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.SystemMessage(systemPrompt),
+			openai.UserMessage(prompt),
+		},
+		Model:       "accounts/fireworks/models/gpt-oss-120b",
+		Temperature: openai.Float(0.0),
+		TopP:        openai.Float(1.0),
+	})
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err != nil {
+		log.Printf("Failed to generate tool name with LLM: %v", err)
+		return ec.generateToolName(method, path)
+	}
+
+	// println("LLM response:", chatCompletion.Choices[0].Message.Content)
+	toolName := strings.TrimSpace(chatCompletion.Choices[0].Message.Content)
+
+	if toolName == "" || strings.Contains(toolName, " ") {
+		log.Printf("Invalid tool name generated: '%s', using fallback", toolName)
+		return ec.generateToolName(method, path)
+	}
+
+	println("Generated tool name:", toolName)
+	return toolName
 }
 
 func (ec *EndpointCapture) filterSensitiveHeaders(headers map[string]string) map[string]string {

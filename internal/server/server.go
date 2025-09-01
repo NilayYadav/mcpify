@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -123,19 +122,6 @@ func (s *MCPServer) createToolHandler(req *ToolRequest) func(context.Context, *m
 			},
 		}, nil
 	}
-}
-
-func GenerateToolName(method, path string) string {
-	safePath := strings.ReplaceAll(strings.Trim(path, "/"), "/", "_")
-	if safePath == "" {
-		safePath = "root"
-	}
-
-	if queryPos := strings.Index(safePath, "?"); queryPos > 0 {
-		safePath = safePath[:queryPos]
-	}
-
-	return fmt.Sprintf("%s_%s", strings.ToLower(method), safePath)
 }
 
 func (s *MCPServer) Start(ctx context.Context, addr string) error {
