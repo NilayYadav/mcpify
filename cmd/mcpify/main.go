@@ -18,11 +18,13 @@ import (
 
 func main() {
 	var (
-		target   = flag.String("target", "", "Target server URL to observe (required)")
-		mcpPort  = flag.String("mcp-port", "8081", "MCP server port")
-		verbose  = flag.Bool("verbose", false, "Enable verbose logging")
-		maxTools = flag.Int("max-tools", 100, "Maximum number of tools to capture")
-		useLLM   = flag.Bool("use-llm", true, "Enable LLM for tool name generation")
+		target      = flag.String("target", "", "Target server URL to observe (required)")
+		mcpPort     = flag.String("mcp-port", "8081", "MCP server port")
+		verbose     = flag.Bool("verbose", false, "Enable verbose logging")
+		maxTools    = flag.Int("max-tools", 100, "Maximum number of tools to capture")
+		useLLM      = flag.Bool("use-llm", true, "Enable LLM for tool name generation")
+		llmEndpoint = flag.String("llm-endpoint", "https://api.openai.com/v1/chat/completions", "LLM API endpoint")
+		llm_key     = flag.String("llm-api-key", "", "LLM API key")
 	)
 	flag.Parse()
 
@@ -40,9 +42,13 @@ func main() {
 		log.Printf("Make sure your server is running at %s", *target)
 	}
 
+	if *useLLM && *llm_key == "" {
+		log.Fatal("LLM API key required when using LLM")
+	}
+
 	mcpServer := server.NewMCPServer("mcpify", "1.0.0", *maxTools)
 
-	endpointCapture := capture.NewEndpointCapture(targetURL, mcpServer, *useLLM)
+	endpointCapture := capture.NewEndpointCapture(targetURL, mcpServer, *useLLM, *llm_key, *llmEndpoint)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

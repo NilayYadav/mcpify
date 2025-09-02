@@ -31,6 +31,8 @@ type EndpointCapture struct {
 	seenAPIs      map[string]*APICall
 	mu            sync.RWMutex
 	useLLM        bool
+	llmKey        string
+	llmEndpoint   string
 }
 
 type APICall struct {
@@ -44,12 +46,14 @@ type APICall struct {
 	StatusCodes []int             `json:"status_codes,omitempty"`
 }
 
-func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar, useLLM bool) *EndpointCapture {
+func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar, useLLM bool, llmKey, llmEndpoint string) *EndpointCapture {
 	return &EndpointCapture{
 		target:        target,
 		toolRegistrar: toolRegistrar,
 		seenAPIs:      make(map[string]*APICall),
 		useLLM:        useLLM,
+		llmKey:        llmKey,
+		llmEndpoint:   llmEndpoint,
 	}
 }
 
@@ -330,8 +334,8 @@ func (ec *EndpointCapture) GenerateToolNameWithLLM(method, path string, requestB
 	)
 
 	client := openai.NewClient(
-		option.WithBaseURL("https://api.fireworks.ai/inference/v1"),
-		option.WithAPIKey("ie8J0Y4auCwWjZxx4p5XvQYwH24pHjrLKMZv7RpcGFpAQ2P2"),
+		option.WithBaseURL(ec.llmEndpoint),
+		option.WithAPIKey(ec.llmKey),
 	)
 
 	chatCompletion, err := client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
