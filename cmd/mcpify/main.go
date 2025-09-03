@@ -22,7 +22,7 @@ func main() {
 		mcpPort  = flag.String("mcp-port", "8081", "MCP server port")
 		verbose  = flag.Bool("verbose", false, "Enable verbose logging")
 		maxTools = flag.Int("max-tools", 100, "Maximum number of tools to capture")
-		useLLM   = flag.Bool("use-llm", true, "Enable LLM for tool name generation")
+		useLLM   = flag.Bool("use-llm", false, "Enable LLM for tool name generation")
 	)
 	flag.Parse()
 
