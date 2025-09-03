@@ -18,13 +18,11 @@ import (
 
 func main() {
 	var (
-		target      = flag.String("target", "", "Target server URL to observe (required)")
-		mcpPort     = flag.String("mcp-port", "8081", "MCP server port")
-		verbose     = flag.Bool("verbose", false, "Enable verbose logging")
-		maxTools    = flag.Int("max-tools", 100, "Maximum number of tools to capture")
-		useLLM      = flag.Bool("use-llm", true, "Enable LLM for tool name generation")
-		llmEndpoint = flag.String("llm-endpoint", "https://api.openai.com/v1/chat/completions", "LLM API endpoint")
-		llm_key     = flag.String("llm-api-key", "", "LLM API key")
+		target   = flag.String("target", "", "Target server URL to observe (required)")
+		mcpPort  = flag.String("mcp-port", "8081", "MCP server port")
+		verbose  = flag.Bool("verbose", false, "Enable verbose logging")
+		maxTools = flag.Int("max-tools", 100, "Maximum number of tools to capture")
+		useLLM   = flag.Bool("use-llm", true, "Enable LLM for tool name generation")
 	)
 	flag.Parse()
 
@@ -42,13 +40,30 @@ func main() {
 		log.Printf("Make sure your server is running at %s", *target)
 	}
 
-	if *useLLM && *llm_key == "" {
-		log.Fatal("LLM API key required when using LLM")
+	llm := os.Getenv("LLM")
+	llmEndpoint := os.Getenv("LLM_ENDPOINT")
+	llmKey := os.Getenv("LLM_API_KEY")
+
+	if *useLLM {
+		if llm == "" {
+			log.Fatal(`LLM model required when using LLM. Set the LLM environment variable: export LLM="your-llm-model"`)
+		}
+
+		if llmEndpoint == "" {
+			log.Fatal(`LLM endpoint required when using LLM. Set the LLM_ENDPOINT environment variable: export LLM_ENDPOINT="https://your-llm-provider-endpoint"`)
+		}
+
+		if llmKey == "" {
+			log.Fatal(`LLM API key required when using LLM. Set the LLM_API_KEY environment variable: export LLM_API_KEY="your-api-key-here"`)
+		}
+
+		log.Printf("Using LLM model: %s", llm)
+		log.Printf("Using LLM endpoint: %s", llmEndpoint)
 	}
 
 	mcpServer := server.NewMCPServer("mcpify", "1.0.0", *maxTools)
 
-	endpointCapture := capture.NewEndpointCapture(targetURL, mcpServer, *useLLM, *llm_key, *llmEndpoint)
+	endpointCapture := capture.NewEndpointCapture(targetURL, mcpServer, *useLLM, llmKey, llmEndpoint, llm)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

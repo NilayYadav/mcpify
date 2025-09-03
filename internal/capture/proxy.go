@@ -33,6 +33,7 @@ type EndpointCapture struct {
 	useLLM        bool
 	llmKey        string
 	llmEndpoint   string
+	llm           string
 }
 
 type APICall struct {
@@ -46,7 +47,7 @@ type APICall struct {
 	StatusCodes []int             `json:"status_codes,omitempty"`
 }
 
-func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar, useLLM bool, llmKey, llmEndpoint string) *EndpointCapture {
+func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar, useLLM bool, llmKey, llmEndpoint string, llm string) *EndpointCapture {
 	return &EndpointCapture{
 		target:        target,
 		toolRegistrar: toolRegistrar,
@@ -54,6 +55,7 @@ func NewEndpointCapture(target *url.URL, toolRegistrar ToolRegistrar, useLLM boo
 		useLLM:        useLLM,
 		llmKey:        llmKey,
 		llmEndpoint:   llmEndpoint,
+		llm:           llm,
 	}
 }
 
@@ -343,7 +345,7 @@ func (ec *EndpointCapture) GenerateToolNameWithLLM(method, path string, requestB
 			openai.SystemMessage(systemPrompt),
 			openai.UserMessage(prompt),
 		},
-		Model:       "accounts/fireworks/models/gpt-oss-120b",
+		Model:       ec.llm,
 		Temperature: openai.Float(0.0),
 		TopP:        openai.Float(1.0),
 	})
