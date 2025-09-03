@@ -4,7 +4,7 @@ Automatically generate MCP (Model Context Protocol) servers by observing HTTP AP
 
 ## Demo
 
-![Demo](mcpify.gif)
+![Demo](static/mcpify.gif)
 
 ## What it does
 
