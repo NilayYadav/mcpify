@@ -2,6 +2,10 @@
 
 Automatically generate MCP (Model Context Protocol) servers by observing HTTP API traffic.
 
+## Demo
+
+![Demo](mcpify.gif)
+
 ## What it does
 
 mcpify watches HTTP requests to your server and automatically creates MCP tools for each discovered endpoint. AI assistants can then call these tools to interact with your APIs.
