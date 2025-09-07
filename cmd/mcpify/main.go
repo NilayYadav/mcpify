@@ -13,31 +13,59 @@ import (
 	"time"
 
 	"github.com/NilayYadav/mcpify/internal/capture"
+	"github.com/NilayYadav/mcpify/internal/config"
 	"github.com/NilayYadav/mcpify/internal/server"
 )
 
 func main() {
 	var (
-		target   = flag.String("target", "", "Target server URL to observe (required)")
-		mcpPort  = flag.String("mcp-port", "8081", "MCP server port")
-		verbose  = flag.Bool("verbose", false, "Enable verbose logging")
-		maxTools = flag.Int("max-tools", 100, "Maximum number of tools to capture")
-		useLLM   = flag.Bool("use-llm", false, "Enable LLM for tool name generation")
+		target     = flag.String("target", "", "Target server URL to observe (required)")
+		mcpPort    = flag.String("mcp-port", "8081", "MCP server port")
+		verbose    = flag.Bool("verbose", false, "Enable verbose logging")
+		maxTools   = flag.Int("max-tools", 100, "Maximum number of tools to capture")
+		useLLM     = flag.Bool("use-llm", false, "Enable LLM for tool name generation")
+		mcpName    = flag.String("mcp-name", "mcpify", "Name of the MCP server")
+		configPath = flag.String("config", "", "Custom config file path (default: system config directory)")
 	)
 	flag.Parse()
 
-	if *target == "" {
+	var finalConfigPath string
+	if *configPath != "" {
+		finalConfigPath = *configPath
+	} else {
+		finalConfigPath = config.GetConfigPath()
+	}
+
+	log.Printf("Using config file: %s", finalConfigPath)
+
+	cfg, err := config.LoadConfig(finalConfigPath)
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	targetURL := *target
+	if targetURL == "" && cfg.LastTarget != "" {
+		targetURL = cfg.LastTarget
+		log.Printf("Using saved target: %s", targetURL)
+	}
+
+	if targetURL == "" {
 		log.Fatal("Target server URL required. Usage: mcpify --target http://localhost:3000")
 	}
 
-	targetURL, err := url.Parse(*target)
+	// Update config if new target provided
+	if *target != "" && *target != cfg.LastTarget {
+		cfg.LastTarget = *target
+		cfg.Save(finalConfigPath)
+	}
+
+	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		log.Fatalf("Invalid target URL: %v", err)
 	}
 
-	if err := checkTargetServer(*target); err != nil {
+	if err := checkTargetServer(targetURL); err != nil {
 		log.Fatalf("Target server check failed: %v", err)
-		log.Printf("Make sure your server is running at %s", *target)
 	}
 
 	llm := os.Getenv("LLM")
@@ -61,9 +89,9 @@ func main() {
 		log.Printf("Using LLM endpoint: %s", llmEndpoint)
 	}
 
-	mcpServer := server.NewMCPServer("mcpify", "1.0.0", *maxTools)
+	mcpServer := server.NewMCPServer(*mcpName, "1.0.0", *maxTools, cfg)
 
-	endpointCapture := capture.NewEndpointCapture(targetURL, mcpServer, *useLLM, llmKey, llmEndpoint, llm)
+	endpointCapture := capture.NewEndpointCapture(parsedURL, mcpServer, *useLLM, llmKey, llmEndpoint, llm)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

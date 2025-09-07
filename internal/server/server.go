@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/NilayYadav/mcpify/internal/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -20,32 +21,48 @@ type ToolRegistrar interface {
 
 type MCPServer struct {
 	mcpServer *mcp.Server
-	tools     map[string]*ToolRequest
+	tools     map[string]*config.Tool
 	maxTools  int
 	mu        sync.RWMutex
-}
-
-type ToolRequest struct {
-	Method      string            `json:"method"`
-	URL         string            `json:"url"`
-	Headers     map[string]string `json:"headers"`
-	Body        []byte            `json:"body"`
-	Description string            `json:"description"`
-	CreatedAt   time.Time         `json:"created_at"`
+	config    *config.Config
 }
 
 type CallParams struct {
 	OverrideBody string `json:"override_body,omitempty"`
 }
 
-func NewMCPServer(name, version string, maxTools int) *MCPServer {
-	return &MCPServer{
+func NewMCPServer(name, version string, maxTools int, cfg *config.Config) *MCPServer {
+	server := &MCPServer{
 		mcpServer: mcp.NewServer(&mcp.Implementation{
 			Name:    name,
 			Version: version,
 		}, nil),
-		tools:    make(map[string]*ToolRequest),
+		tools:    make(map[string]*config.Tool),
 		maxTools: maxTools,
+		config:   cfg,
+	}
+
+	server.loadTools()
+
+	return server
+}
+
+func (s *MCPServer) loadTools() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	log.Printf("Loading %d tools from config", len(s.config.Tools))
+
+	for name, tool := range s.config.Tools {
+		s.tools[name] = tool
+
+		handler := s.createToolHandler(tool)
+		mcp.AddTool(s.mcpServer, &mcp.Tool{
+			Name:        name,
+			Description: tool.Description,
+		}, handler)
+
+		log.Printf("Loaded tool: %s (%s %s)", name, tool.Method, tool.URL)
 	}
 }
 
@@ -62,16 +79,23 @@ func (s *MCPServer) RegisterTool(name string, method, url string, headers map[st
 		return fmt.Errorf("maximum number of tools (%d) reached", s.maxTools)
 	}
 
-	req := &ToolRequest{
+	req := &config.Tool{
+		Name:        name,
 		Method:      method,
 		URL:         url,
 		Headers:     headers,
-		Body:        body,
+		Body:        string(body),
 		Description: description,
 		CreatedAt:   time.Now(),
 	}
 
 	s.tools[name] = req
+
+	s.config.AddTool(req)
+
+	if err := s.config.Save(s.config.Path); err != nil {
+		log.Printf("Failed to save config: %v", err)
+	}
 
 	handler := s.createToolHandler(req)
 	mcp.AddTool(s.mcpServer, &mcp.Tool{
@@ -82,14 +106,14 @@ func (s *MCPServer) RegisterTool(name string, method, url string, headers map[st
 	return nil
 }
 
-func (s *MCPServer) createToolHandler(req *ToolRequest) func(context.Context, *mcp.ServerSession, *mcp.CallToolParamsFor[CallParams]) (*mcp.CallToolResultFor[any], error) {
+func (s *MCPServer) createToolHandler(req *config.Tool) func(context.Context, *mcp.ServerSession, *mcp.CallToolParamsFor[CallParams]) (*mcp.CallToolResultFor[any], error) {
 	return func(ctx context.Context, session *mcp.ServerSession, params *mcp.CallToolParamsFor[CallParams]) (*mcp.CallToolResultFor[any], error) {
 		// Use override body if provided, otherwise use captured body
 		var body []byte
 		if params.Arguments.OverrideBody != "" {
 			body = []byte(params.Arguments.OverrideBody)
 		} else {
-			body = req.Body
+			body = []byte(req.Body)
 		}
 
 		httpReq, err := http.NewRequestWithContext(ctx, req.Method, req.URL, bytes.NewReader(body))
@@ -129,7 +153,7 @@ func (s *MCPServer) Start(ctx context.Context, addr string) error {
 
 	mux.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.RLock()
-		tools := make([]*ToolRequest, 0, len(s.tools))
+		tools := make([]*config.Tool, 0, len(s.tools))
 		names := make([]string, 0, len(s.tools))
 		for name, tool := range s.tools {
 			tools = append(tools, tool)
