@@ -29,6 +29,23 @@ sudo mcpify --target http://localhost:3000
 3. Make API calls to your server (using your app, curl, Postman, etc.)
 4. Each unique endpoint becomes available as an MCP tool at `http://localhost:8081/mcp`
 
+## Persistent Configuration
+
+mcpify automatically saves discovered tools and configuration:
+
+- **Linux**: `~/.config/mcpify/config.json`
+- **macOS**: `~/Library/Application Support/mcpify/config.json`
+
+Discovered tools persist across restarts. If you run mcpify without `--target`, it will use the last observed server.
+
+```bash
+# First run - discovers and saves tools
+sudo mcpify --target http://localhost:3000
+
+# Later runs - automatically uses saved target and loads existing tools
+sudo mcpify
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -44,14 +61,15 @@ export LLM_API_KEY="HF_TOKEN"
 ```bash
 sudo -E mcpify --target http://localhost:3000 \
        --max-tools 100 \
-       --use-llm true \
+       --use-llm \
        --verbose
 ```
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--target` | Target server URL to observe (required) | - |
+| `--target` | Target server URL to observe (uses saved target if omitted) | - |
 | `--mcp-port` | MCP server port | `8081` |
+| `--mcp-name` | Name of the MCP server | `mcpify` |
 | `--max-tools` | Maximum number of tools to capture | `100` |
 | `--use-llm` | Enable LLM for tool name generation | `false` |
 | `--verbose` | Enable verbose logging | `false` |

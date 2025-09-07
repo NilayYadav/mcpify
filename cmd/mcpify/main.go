@@ -25,7 +25,7 @@ func main() {
 		maxTools   = flag.Int("max-tools", 100, "Maximum number of tools to capture")
 		useLLM     = flag.Bool("use-llm", false, "Enable LLM for tool name generation")
 		mcpName    = flag.String("mcp-name", "mcpify", "Name of the MCP server")
-		configPath = flag.String("config", "", "Custom config file path (default: system config directory)")
+		configPath = flag.String("config", "", "Custom config file path")
 	)
 	flag.Parse()
 
