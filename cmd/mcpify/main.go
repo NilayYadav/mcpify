@@ -17,6 +17,11 @@ import (
 	"github.com/NilayYadav/mcpify/internal/server"
 )
 
+var mcpServer interface {
+	RegisterTool(name string, method, url string, headers map[string]string, body []byte, description string) error
+	Start(ctx context.Context, addr string) error
+}
+
 func main() {
 	var (
 		target     = flag.String("target", "", "Target server URL to observe (required)")
@@ -26,6 +31,7 @@ func main() {
 		useLLM     = flag.Bool("use-llm", false, "Enable LLM for tool name generation")
 		mcpName    = flag.String("mcp-name", "mcpify", "Name of the MCP server")
 		configPath = flag.String("config", "", "Custom config file path")
+		grouping   = flag.Bool("grouping", false, "Enable intelligent grouping of endpoints using LLM")
 	)
 	flag.Parse()
 
@@ -72,24 +78,30 @@ func main() {
 	llmEndpoint := os.Getenv("LLM_ENDPOINT")
 	llmKey := os.Getenv("LLM_API_KEY")
 
-	if *useLLM {
+	if *useLLM || *grouping {
 		if llm == "" {
-			log.Fatal(`LLM model required when using LLM. Set the LLM environment variable: export LLM="your-llm-model"`)
+			log.Fatal(`LLM model required when using LLM or grouping. Set the LLM environment variable: export LLM="your-llm-model"`)
 		}
 
 		if llmEndpoint == "" {
-			log.Fatal(`LLM endpoint required when using LLM. Set the LLM_ENDPOINT environment variable: export LLM_ENDPOINT="https://your-llm-provider-endpoint"`)
+			log.Fatal(`LLM endpoint required when using LLM or grouping. Set the LLM_ENDPOINT environment variable: export LLM_ENDPOINT="https://your-llm-provider-endpoint"`)
 		}
 
 		if llmKey == "" {
-			log.Fatal(`LLM API key required when using LLM. Set the LLM_API_KEY environment variable: export LLM_API_KEY="your-api-key-here"`)
+			log.Fatal(`LLM API key required when using LLM or grouping . Set the LLM_API_KEY environment variable: export LLM_API_KEY="your-api-key-here"`)
 		}
 
 		log.Printf("Using LLM model: %s", llm)
 		log.Printf("Using LLM endpoint: %s", llmEndpoint)
 	}
 
-	mcpServer := server.NewMCPServer(*mcpName, "1.0.0", *maxTools, cfg)
+	if *grouping {
+		log.Printf("Using LLM grouping with model: %s", llm)
+		mcpServer = server.NewGroupedMCPServer(*mcpName, "1.0.0", cfg, llmKey, llmEndpoint, llm)
+	} else {
+		log.Printf("Using individual tool mode")
+		mcpServer = server.NewMCPServer(*mcpName, "1.0.0", *maxTools, cfg)
+	}
 
 	endpointCapture := capture.NewEndpointCapture(parsedURL, mcpServer, *useLLM, llmKey, llmEndpoint, llm)
 

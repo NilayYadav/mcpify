@@ -11,13 +11,15 @@ import (
 )
 
 type Config struct {
-	mu         sync.RWMutex
-	Path       string           `json:"-"`
-	MCPPort    string           `json:"mcp_port"`
-	MaxTools   int              `json:"max_tools"`
-	UseLLM     bool             `json:"use_llm"`
-	LastTarget string           `json:"last_target"`
-	Tools      map[string]*Tool `json:"tools"`
+	mu          sync.RWMutex
+	Path        string            `json:"-"`
+	MCPPort     string            `json:"mcp_port"`
+	MaxTools    int               `json:"max_tools"`
+	UseLLM      bool              `json:"use_llm"`
+	UseGrouping bool              `json:"use_grouping"`
+	LastTarget  string            `json:"last_target"`
+	Tools       map[string]*Tool  `json:"tools"`
+	Groups      map[string]*Group `json:"groups,omitempty"`
 }
 
 type Tool struct {
@@ -32,18 +34,28 @@ type Tool struct {
 	UseCount    int               `json:"use_count"`
 }
 
+type Group struct {
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	ToolNames   []string  `json:"tool_names"`
+	CreatedAt   time.Time `json:"created_at"`
+	LastUsed    time.Time `json:"last_used,omitempty"`
+	UseCount    int       `json:"use_count"`
+}
+
 func DefaultConfig(configPath string) *Config {
 	return &Config{
-		Path:     configPath,
-		MCPPort:  "8081",
-		MaxTools: 100,
-		UseLLM:   true,
-		Tools:    make(map[string]*Tool),
+		Path:        configPath,
+		MCPPort:     "8081",
+		MaxTools:    100,
+		UseLLM:      true,
+		UseGrouping: false,
+		Tools:       make(map[string]*Tool),
+		Groups:      make(map[string]*Group),
 	}
 }
 
 func GetConfigPath() string {
-
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		log.Fatalf("Unsupported operating system: %s. Only macOS and Linux are supported.", runtime.GOOS)
 	}
@@ -55,10 +67,8 @@ func GetConfigPath() string {
 
 	var configDir string
 	if runtime.GOOS == "darwin" {
-		// macOS: ~/Library/Application Support/mcpify
 		configDir = filepath.Join(homeDir, "Library", "Application Support", "mcpify")
 	} else {
-		// Linux: ~/.config/mcpify
 		if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
 			configDir = filepath.Join(xdgConfig, "mcpify")
 		} else {
@@ -95,6 +105,9 @@ func LoadConfig(configPath string) (*Config, error) {
 	if cfg.Tools == nil {
 		cfg.Tools = make(map[string]*Tool)
 	}
+	if cfg.Groups == nil {
+		cfg.Groups = make(map[string]*Group)
+	}
 
 	return cfg, nil
 }
@@ -126,4 +139,46 @@ func (c *Config) GetTool(name string) *Tool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.Tools[name]
+}
+
+func (c *Config) AddGroup(group *Group) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Groups[group.Name] = group
+}
+
+func (c *Config) RemoveGroup(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.Groups, name)
+}
+
+func (c *Config) GetGroup(name string) *Group {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.Groups[name]
+}
+
+func (c *Config) ClearGroups() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Groups = make(map[string]*Group)
+}
+
+func (c *Config) GetToolsInGroup(groupName string) []*Tool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	group := c.Groups[groupName]
+	if group == nil {
+		return []*Tool{}
+	}
+
+	var tools []*Tool
+	for _, toolName := range group.ToolNames {
+		if tool := c.Tools[toolName]; tool != nil {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
 }
