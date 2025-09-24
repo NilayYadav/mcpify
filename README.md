@@ -46,6 +46,24 @@ sudo mcpify --target http://localhost:3000
 sudo mcpify
 ```
 
+## Grouping Feature
+
+mcpify can now automatically group related API endpoints into logical tool groups. This makes it easier for AI assistants to understand and interact with your API by organizing endpoints by resource or functionality (e.g., all `/users` endpoints are grouped together).
+
+### How Grouping Works
+
+- Endpoints are analyzed and grouped based on URL patterns and HTTP methods.
+- Each group is exposed as a collection of related tools in the MCP server.
+- Grouping improves discoverability and usability for large APIs.
+
+Grouping is enabled by default. You can control grouping behavior with the following command line flag:
+
+```bash
+sudo mcpify --target http://localhost:3000 --grouping
+```
+
+Grouped tools are available at `http://localhost:8081/mcp` as usual, but now organized by group.
+
 ## Configuration
 
 ### Environment Variables
@@ -73,6 +91,8 @@ sudo -E mcpify --target http://localhost:3000 \
 | `--max-tools` | Maximum number of tools to capture | `100` |
 | `--use-llm` | Enable LLM for tool name generation | `false` |
 | `--verbose` | Enable verbose logging | `false` |
+| `--grouping` | Enable grouping of related API endpoints | `true` |
+
 
 ## Requirements
 
