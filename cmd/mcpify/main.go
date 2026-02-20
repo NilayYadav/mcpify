@@ -31,7 +31,7 @@ func main() {
 		useLLM     = flag.Bool("use-llm", false, "Enable LLM for tool name generation")
 		mcpName    = flag.String("mcp-name", "mcpify", "Name of the MCP server")
 		configPath = flag.String("config", "", "Custom config file path")
-		grouping   = flag.Bool("grouping", false, "Enable intelligent grouping of endpoints using LLM")
+		grouping   = flag.Bool("groupings", false, "Enable intelligent grouping of endpoints using LLM")
 	)
 	flag.Parse()
 
