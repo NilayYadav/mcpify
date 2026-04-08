@@ -102,9 +102,9 @@ func getLoopbackInterface() (string, error) {
 		return "lo0", nil
 	case "windows":
 		return "", fmt.Errorf("Windows is not supported at the moment")
-	default:
-		return "lo0", nil
-	}
+	// default:
+	// 	return "lo0", nil
+	// }
 }
 
 func (ec *EndpointCapture) processPacket(packet gopacket.Packet, verbose bool) {
